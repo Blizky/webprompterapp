@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>WebPrompter | Free Online Teleprompter & Mirror App</title>
+    
+    <meta name="description" content="A free, professional online teleprompter that works in your browser. Features remote control via phone, voice scrolling, and mirroring for teleprompter glass. No download required.">
+    
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://webprompter.app/">
+    <meta property="og:title" content="WebPrompter | Free Online Teleprompter">
+    <meta property="og:description" content="Turn your iPad into a pro teleprompter. Control it remotely with your phone. No app download needed.">
+    <meta property="og:image" content="https://webprompter.app/assets/og-image.jpg">
+
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <link rel="stylesheet" href="style.css">
+    
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
+    <link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="assets/favicon-16x16.png">
+    <link rel="manifest" href="assets/site.webmanifest">
+    <link rel="shortcut icon" href="assets/favicon.ico">
+
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#1A1A1A">
+    
+    <link rel="canonical" href="https://webprompter.app/" />
+</head>
+    
+<body>
+
+    <div id="mobile-welcome" style="display: none;">
+        <div class="mw-content">
+            <img src="assets/IMG_5847.jpg" alt="Setup Example" class="mw-image">
+            
+            <div class="mw-text">
+                <h1>Welcome to WebPrompter</h1>
+                <p>For the best experience, open this page on your <strong>iPad or Tablet</strong>.</p>
+                <p style="font-size: 0.9rem; color: #aaa; margin-top: 5px;">(You can use this phone as the Remote!)</p>
+                
+                <button onclick="document.getElementById('mobile-welcome').style.display='none'" class="btn" style="width: 100%; margin-top: 20px; font-size: 1rem;">
+                    Got it, continue anyway
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <div id="edit-mode">
+        <div class="header-container">
+          <span class="app_icon">💬</span>
+          <span class="app_title">
+              <span style="color: var(--white);">Web</span>Prompter<span class="title-suffix">.app</span>
+          </span>
+        </div>
+        <textarea id="script-input" placeholder="1. Open this page on your iPad or Tablet. &#10;2. Paste your script here... &#10;3. Launch and scan the QR code with your Phone to use it as a Remote."></textarea>
+        <button class="btn" onclick="startHost()">Launch Prompter & Remote</button>
+        <a href="help.html" class="help-link">How to use & Recording Tips ℹ️</a>
+
+<section style="max-width: 800px; margin-top: 40px; color: #888; font-size: 0.9rem; line-height: 1.6;">
+    <h2 style="color: var(--white); font-size: 1.2rem;">Free Online Teleprompter for iPad and Tablet</h2>
+    <p>
+        WebPrompter is a simple, <strong>free teleprompter app</strong> that runs directly in your browser. 
+        It turns your browser into a professional autocue studio without requiring any software downloads.
+    </p>
+    
+    <ul style="list-style: none; padding: 0; margin-top: 15px;">
+        
+        <li style="display: flex; align-items: start; margin-bottom: 10px;">
+            <div class="icon-check"></div>
+            <span><strong>Remote Control:</strong> Use your iPhone or Android phone to control speed and scroll wirelessly.</span>
+        </li>
+        
+        <li style="display: flex; align-items: start; margin-bottom: 10px;">
+            <div class="icon-check"></div>
+            <span><strong>Mirror Mode:</strong> Flips text for use with professional teleprompter glass / beamsplitters.</span>
+        </li>
+        
+        <li style="display: flex; align-items: start; margin-bottom: 10px;">
+            <div class="icon-check"></div>
+            <span><strong>Offline Capable:</strong> Works on iPad, tablet, laptop, and desktop (Windows/Mac).</span>
+        </li>
+        
+    </ul>
+</section>
+        
+    </div>
+
+    <div id="prompter-mode">
+        <div id="scroll-container"><div id="text-display"></div></div>
+        
+        <div id="footer-controls">
+            <button id="close-btn" onclick="closePrompter()">CLOSE</button>
+            <div id="status-bar">WAITING FOR REMOTE...</div>
+        </div>
+
+        <div id="qr-overlay">
+            <div id="qrcode" style="padding:20px; background:white; border-radius:10px;"></div>
+            <p style="color:var(--yellow); font-weight:bold; margin-top:20px;">Scan with your Phone to open Remote</p>
+        </div>
+    </div>
+    
+    <script src="script.js"></script>
+    <script>
+        // 1. Redirect if Remote URL parameter exists
+        if (window.location.search.includes('remote')) {
+            window.location.href = 'remote.html' + window.location.search;
+        }
+
+        // 2. Load settings
+        document.getElementById('script-input').value = settings.text;
+
+        // 3. UNIVERSAL MOBILE DETECTION
+        // We check the User Agent string for specific mobile identifiers.
+        // This effectively targets Phones while letting iPads/Tablets pass through.
+        function checkMobile() {
+            const ua = navigator.userAgent || navigator.vendor || window.opera;
+            // Detects iPhone, iPod, Android Mobile (but usually excludes tablets), BlackBerry, etc.
+            const isPhone = /iPhone|iPod|Android.*Mobile|BlackBerry|IEMobile|Opera Mini/i.test(ua);
+            
+            if (isPhone) {
+                document.getElementById('mobile-welcome').style.display = 'flex';
+            }
+        }
+        
+        // Run check
+        checkMobile();
+    </script>
+    <script src="https://cdn.counter.dev/script.js" data-id="dd7fb35a-238d-4948-a5a8-694b141e7608" data-utcoffset="-6"></script>
+</body>
+</html>

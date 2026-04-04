@@ -1,0 +1,413 @@
+:root {
+    --blue: #0099CC; --yellow: #FFCC33; --white: #FDFDF9;
+    --black: #1A1A1A; --red: #c03221;
+}
+
+body, html { 
+    margin: 0; padding: 0; height: 100%; 
+    font-family: 'Inter', system-ui, sans-serif;
+    background: var(--black); color: var(--white);
+    overflow: hidden;
+}
+
+/* Edit Mode container - covers the page */
+#edit-mode { 
+    background: var(--black); 
+    color: var(--black);
+    display: flex; 
+    flex-direction: column; 
+    height: 100vh; 
+    padding: 20px; 
+    box-sizing: border-box;
+}
+
+textarea { 
+    flex-grow: 0; 
+    height: 50vh;
+    margin: 15px 0; 
+    padding: 20px; 
+    border: 2px solid var(--yellow);
+    font-size: 1.2rem; 
+    border-radius: 10px; 
+    resize: none;
+}
+
+/* Prompter Display */
+#prompter-mode { 
+    display: none; 
+    height: 100vh;
+    /* To fix full screen functionality */
+    position: fixed;
+    inset: 0;        /* This is a shortcut for top:0, left:0, right:0, bottom:0 */
+    z-index: 999;    /* This ensures it sits on top of the footer/textarea */
+}
+
+/* CHANGED: Added transition here so the whole container flips smoothly.
+   We apply the mirror transform to THIS container now.
+*/
+#scroll-container {
+    height: 100%; 
+    overflow-y: scroll; 
+    padding: 45vh 5vw;
+    scroll-behavior: auto; /* Smoother for manual control */
+    transition: transform 0.3s; 
+}
+
+#text-display { 
+    font-size: 90px; 
+    line-height: 1.5; 
+    white-space: pre-wrap; 
+}
+
+/* CHANGED: Vertical Flip for Teleprompter Glass.
+   When applied to the container, it flips text Upside Down AND reverses scroll direction.
+*/
+.mirrored { 
+    transform: scaleY(-1); 
+}
+
+/* UI Elements */
+
+/* button */
+.btn {
+    background: var(--blue);
+    color: #ffffff;
+    border: none;
+    padding: 10px 30px;
+    border-radius: 8px;
+    font-weight: 700;
+    font-size: 1.5rem;
+    cursor: pointer;
+    text-decoration: none;
+    min-width: auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 10px 20px rgba(0,0,0,0.35);
+}
+
+/* --- FOOTER CONTROLS (Status + Close) --- */
+
+#footer-controls {
+    position: fixed; 
+    bottom: 20px; 
+    right: 20px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    z-index: 1002;
+}
+
+#status-bar {
+    padding: 5px 12px;
+    border-radius: 20px; 
+    font-size: 12px; 
+    font-weight: bold; 
+    background: var(--red);
+    transition: all 0.3s ease;
+}
+
+#close-btn {
+    background: transparent;
+    color: var(--yellow);
+    border: 1px solid var(--yellow);
+    border-radius: 50px; /* Capsule Shape */
+    padding: 6px 16px;
+    font-size: 0.8rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+#close-btn:hover {
+    background: rgba(255, 204, 51, 0.15); /* Subtle yellow tint on hover */
+    box-shadow: 0 0 10px rgba(255, 204, 51, 0.2);
+}
+
+/* -------------------------------------- */
+
+#qr-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.95);
+    display: none; flex-direction: column; align-items: center; justify-content: center; z-index: 100;
+}
+
+/* --- HEADER / TITLE STYLING --- */
+
+.header-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 10px; 
+}
+
+/* The Mirrored Emoji (Icon) with GLOW */
+.app_icon {
+  display: inline-block;
+  transform: scaleX(-1);
+  font-size: 28px;
+  margin-right: 12px;
+  line-height: 1;
+  filter: drop-shadow(0 0 8px rgba(0, 153, 204, 0.5)); /* Blue Glow */
+}
+
+/* Shared Title Styles */
+.app_title, .app_title_remote {
+  color: var(--blue);
+  font-family: 'Inter', sans-serif;
+  font-weight: 800; /* Extra Bold */
+  letter-spacing: -1px;
+  vertical-align: middle;
+}
+
+.app_title { font-size: 2.2rem; }
+.app_title_remote { font-size: 1.8rem; }
+
+/* The .app extension */
+.title-suffix {
+    color: var(--white);
+    opacity: 0.5;
+    font-weight: 400;
+    font-size: 0.6em; 
+    margin-left: 2px;
+}
+
+/* ------------------------------- */
+
+.bliz-footer {
+    text-align: center;
+    padding: 20px 0;
+    font-size: 0.9rem;
+    color: #666; 
+    background: transparent;
+}
+
+.heart {
+    color: var(--red); 
+    display: inline-block;
+    transition: transform 0.3s ease;
+}
+
+.bliz-footer:hover .heart {
+    transform: scale(1.2);
+}
+
+.icon-kofi {
+  width: 20px;
+  height: 20px;
+  vertical-align: -4px;
+}
+
+footer a {
+  color: var(--yellow);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+footer a:hover {
+  text-decoration: underline;
+}
+
+
+.status-dot {
+    width: 15px;
+    height: 15px;
+    padding: 0 !important;       /* Remove text padding */
+    border-radius: 50% !important; /* Make it a circle */
+    background: #2ecc71 !important; /* Green */
+    color: transparent;          /* Hide any text */
+    box-shadow: 0 0 10px rgba(46, 204, 113, 0.6); /* Optional: nice green glow */
+}
+
+/* Help Page Styles */
+.help-container {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 20px;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
+}
+
+.help-content {
+    background: #222;
+    padding: 20px;
+    border-radius: 15px;
+    border: 1px solid #333;
+    overflow-y: auto;
+    flex-grow: 1;
+    line-height: 1.6;
+}
+
+.help-content h1 {
+    font-size: 1.5rem;
+    margin-top: 0;
+    color: var(--blue);
+}
+
+.help-content li {
+    margin-bottom: 10px;
+    color: #ddd;
+}
+
+.help-link {
+    color: #666;
+    text-decoration: none;
+    margin-top: 15px;
+    font-size: 0.9rem;
+    text-align: center;
+    transition: color 0.2s;
+}
+
+.help-link:hover {
+    color: var(--yellow);
+    text-decoration: underline;
+}
+
+/* Special box for the Audio Tip */
+.pro-tip {
+    background: rgba(255, 204, 51, 0.1); /* Low opacity yellow */
+    border: 1px solid var(--yellow);
+    padding: 15px;
+    border-radius: 8px;
+    margin: 15px 0;
+}
+
+.pro-tip h3 {
+    color: var(--yellow);
+    margin-top: 0;
+}
+
+
+/* Mobile tweak: Stack them on small screens */
+@media (max-width: 500px) {
+    .feedback-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Contact List Styling */
+.contact-list {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    margin-top: 15px;
+    margin-bottom: 30px;
+}
+
+.contact-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.icon-sm {
+    width: 24px;
+    height: 24px;
+    display: block;
+    /* 1. Turn black SVG to White */
+    filter: invert(1);
+    /* 2. Dim it slightly to match the grey text */
+    opacity: 0.7; 
+    transition: opacity 0.2s ease;
+}
+
+/* Optional: Make the icon brighten up when you hover the entire row */
+.contact-item:hover .icon-sm {
+    opacity: 1; /* Bright white on hover */
+}
+
+/* Elegant Grey Links */
+.text-link {
+    color: #bbb; /* Soft grey to contrast with white headers */
+    text-decoration: none;
+    font-size: 1.1rem;
+    font-weight: 500;
+    transition: color 0.2s ease;
+}
+
+.text-link:hover {
+    color: var(--white); /* Brightens to white on hover */
+    text-decoration: underline;
+}
+
+.icon-header {
+    width: 32px;
+    height: 32px;
+    margin-right: 15px; /* Added a bit more space */
+    
+    /* 1. Ensure the color is YELLOW, not Blue */
+    background-color: var(--yellow); 
+    
+    /* 2. The Mask "Cuts out" the shape. 
+       NOTE: Ensure 'assets/radio.svg' is the correct path! */
+    -webkit-mask: url('assets/radio.svg') no-repeat center / contain;
+    mask: url('assets/radio.svg') no-repeat center / contain;
+    
+    /* Fallback: If mask fails, show nothing instead of a solid box */
+    display: inline-block;
+}
+
+/* --- MOBILE WELCOME OVERLAY --- */
+#mobile-welcome {
+    /* Hidden by default. JavaScript will toggle this to 'flex' if it detects a phone. */
+    display: none; 
+    
+    position: fixed;
+    inset: 0;
+    z-index: 2000;
+    background: var(--black);
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+
+/* Styles for the inner content remain the same */
+.mw-content {
+    background: #1a1a1a;
+    border: 1px solid #333;
+    border-radius: 20px;
+    overflow: hidden;
+    width: 90%;       /* Takes up 90% of the screen width */
+    max-width: 400px; /* But never gets wider than 400px (for tablets) */
+    box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+    display: flex;
+    flex-direction: column;
+}
+
+.mw-image {
+    width: 100%;
+    height: 180px;
+    object-fit: cover;
+    border-bottom: 1px solid #333;
+}
+
+.mw-text {
+    padding: 15px;
+    text-align: center;
+}
+
+.mw-text h1 {
+    margin-top: 0;
+    color: var(--blue);
+    font-size: 1.5rem;
+}
+
+/* Add this to the bottom of style.css */
+.icon-check {
+    width: 24px;
+    height: 24px;
+    
+    /* This forces the icon to be your brand Yellow */
+    background-color: var(--yellow); 
+    
+    /* This cuts the shape out of the yellow box */
+    -webkit-mask: url('assets/check.svg') no-repeat center / contain;
+    mask: url('assets/check.svg') no-repeat center / contain;
+    
+    margin-right: 10px;
+    flex-shrink: 0; /* Prevents icon from squishing on mobile */
+    display: inline-block;
+}

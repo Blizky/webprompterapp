@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Help & Tips | WebPrompter</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="style.css">
+    
+    <link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="assets/favicon-16x16.png">
+    <link rel="manifest" href="assets/site.webmanifest">
+    <link rel="shortcut icon" href="assets/favicon.ico">
+</head>
+<body>
+    <div class="help-container">
+        
+        <div class="header-container">
+            <span class="app_icon">💬</span>
+            <span class="app_title">
+                <span style="color: var(--white);">Web</span>Prompter<span class="title-suffix">.app</span>
+            </span>
+        </div>
+
+        <div class="help-content">
+            <h1>How to Use</h1>
+            <ol>
+                <li><strong>Prepare Script:</strong> Paste your text into the box on the main page.</li>
+                <li><strong>Launch:</strong> Click "Launch Prompter & Remote".</li>
+                <li><strong>Connect Remote:</strong> Scan the QR code with your phone.</li>
+            </ol>
+
+            <hr>
+
+<h1 style="color: var(--yellow); display: flex; align-items: center;">
+    <div class="icon-header"></div>
+    Important: Prevent Audio Interference
+</h1>
+            
+            <p>If you are recording audio while your phone is nearby, you might hear <strong>static or buzzing</strong> in your recording. This is caused by your phone's cellular radio communicating with cell towers.</p>
+            
+            <div class="pro-tip">
+                <p>1. Turn your Phone to <strong>Airplane Mode</strong>.</p>
+                <p>2. Manually turn <strong>Wi-Fi back ON</strong>.</p>
+                <p>3. Connect to the Remote.</p>
+                <p><em>This stops the powerful cellular interference while keeping the connection alive!</em></p>
+            </div>
+
+            <hr>
+
+            <h1>Troubleshooting</h1>
+            <ul>
+                <li><strong>Connection Failed?</strong> Ensure both devices are on the same Wi-Fi network (or have a working internet connection).</li>
+                <li><strong>Screen Sleeping?</strong> The app tries to keep your screen awake, but check your device settings if it dims.</li>
+            </ul>
+
+            <hr>
+
+            <h1>Feedback & Support</h1>
+            <p>Found a bug? Have a feature request? Let me know!</p>
+            
+            <div class="contact-list">
+                
+                <div class="contact-item">
+                    <img src="assets/email.svg" alt="Email" class="icon-sm">
+                    <a href="mailto:alex.blizky@gmail.com?subject=WebPrompter%20Feedback" class="text-link">
+                        alex.blizky@gmail.com
+                    </a>
+                </div>
+                
+                <div class="contact-item">
+                    <img src="assets/reddit.svg" alt="Reddit" class="icon-sm">
+                    <a href="https://www.reddit.com/message/compose/?to=inih" target="_blank" class="text-link">
+                        u/inih
+                    </a>
+                </div>
+
+            </div>
+
+            <hr>
+
+        <h1 style="color: var(--red);">⚠️ Reset App Data</h1>
+            <p>If settings are broken or the app is stuck, this clears your <strong>saved script and preferences</strong> from this browser so you can start fresh.</p>
+            
+            <button onclick="factoryReset()" class="btn-sub" style="border-color: var(--red); color: var(--red); width: 100%; display: flex; align-items: center; justify-content: center; gap: 10px;">
+                <img src="assets/reset.svg" alt="Reset" class="icon-sm" style="filter: invert(32%) sepia(61%) saturate(2379%) hue-rotate(343deg) brightness(91%) contrast(92%);">
+                Clear Data & Reset
+            </button>
+
+            
+        </div>
+
+        <a href="index.html" class="btn" style="margin-top: 20px; font-size: 1rem;">Back to App</a>
+
+        <footer class="bliz-footer">
+            Made by Alex Blizky with <span class="heart">❤️</span>
+        </footer>
+    </div>
+
+    <script>
+        function factoryReset() {
+            if(confirm('Are you sure? This will delete your saved script and reset all settings to default.')) {
+                localStorage.removeItem('wpSettings');
+                alert('App reset successfully.');
+                window.location.href = 'index.html';
+            }
+        }
+    </script>
+</body>
+</html>

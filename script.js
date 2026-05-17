@@ -6,6 +6,7 @@ let drafts = JSON.parse(localStorage.getItem('wpDrafts')) || [];
 const MAX_DRAFTS = 100;
 const NEW_DRAFT_CONFIRM_PREF_KEY = 'wpSkipNewDraftConfirm';
 const SECTION_COMPLETION_STORAGE_KEY = 'wpSectionCompletions';
+const EMOJI_REGEX = /[\p{Extended_Pictographic}\p{Emoji_Presentation}\uFE0F]/gu;
 let markdownSections = [];
 let selectedSectionStart = 0;
 let hasSelectedSection = false;
@@ -38,9 +39,13 @@ function getScriptInput() {
     return document.getElementById('script-input');
 }
 
+function stripEmojis(text) {
+    return (text || '').replace(EMOJI_REGEX, '').replace(/\u200D/g, '');
+}
+
 function getDraftTitle(text) {
-    const headingMatch = text.match(/^#{1,6}\s+(.+)$/m);
-    const source = headingMatch ? headingMatch[1] : text;
+    const firstLine = text.split(/\r?\n/).map((line) => line.trim()).find(Boolean) || '';
+    const source = firstLine.replace(/^#{1,6}\s+/, '');
     const normalized = source.replace(/\s+/g, ' ').trim();
     if (!normalized) return 'Untitled draft';
     return normalized.length > 25 ? normalized.slice(0, 25) + '...' : normalized;
@@ -52,12 +57,14 @@ function getMarkdownH2Title(line) {
 }
 
 function getMarkdownSections(markdown) {
-    const headingPattern = /^(#{2,3})\s+(.+)$/gm;
+    const headingPattern = /^(#{1,3})\s+(.+)$/gm;
     const matches = [...markdown.matchAll(headingPattern)];
     if (!matches.length) return [];
 
     const sections = [];
+    let hasSeenH1 = false;
     let hasSeenH2 = false;
+    let activeH1Title = '';
     let activeH2Title = '';
     const sectionKeyCounts = {};
 
@@ -75,20 +82,215 @@ function getMarkdownSections(markdown) {
         const start = match.index;
         const end = matches[index + 1]?.index ?? markdown.length;
 
-        if (level === 2) {
-            hasSeenH2 = true;
-            activeH2Title = title;
+        if (level === 1) {
+            hasSeenH1 = true;
+            hasSeenH2 = false;
+            activeH1Title = title;
+            activeH2Title = '';
             sections.push({ title, start, end, level, key: buildSectionKey(level, [title]) });
             return;
         }
 
-        // Only show H3s under an existing H2 tree.
+        if (level === 2) {
+            hasSeenH2 = true;
+            activeH2Title = title;
+            const path = hasSeenH1 ? [activeH1Title, title] : [title];
+            sections.push({ title, start, end, level, key: buildSectionKey(level, path) });
+            return;
+        }
+
+        // Show H3s under the nearest H2, or under H1 if the document skips H2.
         if (level === 3 && hasSeenH2) {
-            sections.push({ title, start, end, level, key: buildSectionKey(level, [activeH2Title, title]) });
+            const path = hasSeenH1 ? [activeH1Title, activeH2Title, title] : [activeH2Title, title];
+            sections.push({ title, start, end, level, key: buildSectionKey(level, path) });
+            return;
+        }
+
+        if (level === 3 && hasSeenH1) {
+            sections.push({ title, start, end, level, key: buildSectionKey(level, [activeH1Title, title]) });
         }
     });
 
     return sections;
+}
+
+function htmlToMarkdown(html) {
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    const { body } = doc;
+
+    function normalizeInlineText(text) {
+        return stripEmojis(text)
+            .replace(/\u00a0/g, ' ')
+            .replace(/\s+/g, ' ');
+    }
+
+    function textFrom(node, options = {}) {
+        if (node.nodeType === Node.TEXT_NODE) return normalizeInlineText(node.textContent || '');
+        if (node.nodeType !== Node.ELEMENT_NODE) return '';
+        const tag = node.tagName.toLowerCase();
+        const wordHeadingLevel = getWordHeadingLevel(node);
+        if (tag === 'br') return '\n';
+        if (tag === 'strong' || tag === 'b') {
+            const inner = childrenText(node, options);
+            const trimmed = inner.trim();
+            if (!trimmed) return inner;
+            if (options.stripBold) return inner;
+            if (trimmed.startsWith('**') && trimmed.endsWith('**')) return inner;
+            return `**${inner}**`;
+        }
+        if (tag === 'em' || tag === 'i') {
+            const inner = childrenText(node, options);
+            if (!inner.trim()) return inner;
+            return `*${inner}*`;
+        }
+        if (tag === 'code') return `\`${childrenText(node, options)}\``;
+        if (tag === 'a') {
+            const href = node.getAttribute('href') || '';
+            const label = childrenText(node, options) || href;
+            return href ? `[${label}](${href})` : label;
+        }
+        if (tag === 'h1') return `## ${childrenText(node, { ...options, stripBold: true })}\n\n`;
+        if (tag === 'h2') return `## ${childrenText(node, { ...options, stripBold: true })}\n\n`;
+        if (tag === 'h3') return `### ${childrenText(node, { ...options, stripBold: true })}\n\n`;
+        if (tag === 'h4') return `#### ${childrenText(node, { ...options, stripBold: true })}\n\n`;
+        if (tag === 'h5') return `##### ${childrenText(node, { ...options, stripBold: true })}\n\n`;
+        if (tag === 'h6') return `###### ${childrenText(node, { ...options, stripBold: true })}\n\n`;
+        if (wordHeadingLevel) {
+            const markdownLevel = Math.max(2, wordHeadingLevel);
+            return `${'#'.repeat(markdownLevel)} ${childrenText(node, { ...options, stripBold: true })}\n\n`;
+        }
+        if (tag === 'p') return `${childrenText(node, options)}\n\n`;
+        if (tag === 'blockquote') return `> ${childrenText(node, options).replace(/\n/g, '\n> ')}\n\n`;
+        if (tag === 'ul') return `${listText(node, '- ')}\n`;
+        if (tag === 'ol') return `${listText(node, '1. ')}\n`;
+        return childrenText(node, options);
+    }
+
+    function getWordHeadingLevel(node) {
+        const className = node.getAttribute('class') || '';
+        const style = node.getAttribute('style') || '';
+        const classMatch = className.match(/\b(?:Mso(?:Heading|Title)|Heading)\s*([1-6])?\b/i);
+        const outlineMatch = style.match(/mso-outline-level:\s*([1-6])/i);
+        const styleNameMatch = style.match(/mso-style-name:\s*['"]?(?:Heading|heading)\s*([1-6])/i);
+        if (styleNameMatch) return Number(styleNameMatch[1]);
+        if (outlineMatch) return Number(outlineMatch[1]);
+        if (!classMatch) return 0;
+        return classMatch[1] ? Number(classMatch[1]) : 1;
+    }
+
+    function childrenText(node, options = {}) {
+        let result = '';
+        node.childNodes.forEach((child) => {
+            result += textFrom(child, options);
+        });
+        return result;
+    }
+
+    function listText(listNode, prefix) {
+        let result = '';
+        const items = Array.from(listNode.children).filter((element) => element.tagName.toLowerCase() === 'li');
+        items.forEach((item, index) => {
+            const actualPrefix = prefix === '1. ' ? `${index + 1}. ` : prefix;
+            const text = childrenText(item).trim();
+            result += `${actualPrefix}${text}\n`;
+        });
+        return result;
+    }
+
+    return childrenText(body)
+        .replace(/[ \t]+\n/g, '\n')
+        .replace(/\n[ \t]+/g, '\n')
+        .replace(/[ \t]{2,}/g, ' ')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim();
+}
+
+function normalizePlainPaste(text) {
+    if (!text) return '';
+    return stripEmojis(text)
+        .replace(/\r\n?/g, '\n')
+        .replace(/\n{3,}/g, '\n\n')
+        .split('\n\n')
+        .map((block) => block.replace(/\n+/g, ' ').replace(/[ \t]{2,}/g, ' ').trim())
+        .filter(Boolean)
+        .join('\n\n')
+        .trim();
+}
+
+function htmlToRenderedParagraphText(html) {
+    if (!html) return '';
+    try {
+        const doc = new DOMParser().parseFromString(html, 'text/html');
+        const blockTags = new Set([
+            'p', 'div', 'article', 'section', 'main', 'aside', 'header', 'footer',
+            'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'li', 'ul', 'ol', 'blockquote',
+            'pre', 'table', 'tr'
+        ]);
+
+        function walk(node) {
+            if (!node) return '';
+            if (node.nodeType === Node.TEXT_NODE) {
+                return (node.textContent || '').replace(/\s+/g, ' ');
+            }
+            if (node.nodeType !== Node.ELEMENT_NODE) return '';
+
+            const tag = node.tagName.toLowerCase();
+            if (tag === 'br') return '\n';
+
+            let chunk = '';
+            node.childNodes.forEach((child) => {
+                chunk += walk(child);
+            });
+
+            if (blockTags.has(tag)) {
+                const trimmed = chunk.trim();
+                return trimmed ? `${trimmed}\n\n` : '';
+            }
+            return chunk;
+        }
+
+        const rendered = walk(doc.body) || doc.body?.innerText || doc.body?.textContent || '';
+        return normalizePlainPaste(rendered);
+    } catch {
+        return '';
+    }
+}
+
+function getPreferredMarkdownPaste(html, plain) {
+    const markdown = htmlToMarkdown(html);
+    const normalizedPlain = normalizePlainPaste(plain || '');
+    const htmlParagraphText = htmlToRenderedParagraphText(html);
+    let preferred = markdown;
+
+    if (normalizedPlain) {
+        const plainBlocks = normalizedPlain.split(/\n\n/).length;
+        const markdownBlocks = markdown.split(/\n\n/).length;
+        if (plainBlocks > 1 && markdownBlocks <= 1) {
+            preferred = normalizedPlain;
+        }
+    }
+
+    if (htmlParagraphText) {
+        const htmlBlocks = htmlParagraphText.split(/\n\n/).length;
+        const markdownBlocks = markdown.split(/\n\n/).length;
+        if (htmlBlocks > 1 && markdownBlocks <= 1) {
+            preferred = htmlParagraphText;
+        }
+    }
+
+    return preferred || htmlParagraphText || normalizedPlain || plain || '';
+}
+
+function looksLikeWordHtml(html) {
+    return /class="?Mso|mso-|xmlns:o=|urn:schemas-microsoft-com:office|WordSection|name="?Generator"?\s+content="?Microsoft Word/i.test(html || '');
+}
+
+function insertTextAtCursor(input, text) {
+    const safeText = stripEmojis(text);
+    const start = input.selectionStart ?? input.value.length;
+    const end = input.selectionEnd ?? input.value.length;
+    input.setRangeText(safeText, start, end, 'end');
+    input.dispatchEvent(new Event('input', { bubbles: true }));
 }
 
 function ensureCurrentScriptId() {
@@ -179,9 +381,13 @@ function updateSectionOutline() {
         hasSelectedSection = false;
     }
 
+    const hasH1Sections = markdownSections.some((section) => section.level === 1);
     markdownSections.forEach((section) => {
         const row = document.createElement('div');
         row.className = 'section-link';
+        if (section.level === 2 && hasH1Sections) {
+            row.classList.add('section-link-h2');
+        }
         if (section.level === 3) {
             row.classList.add('section-link-h3');
         }
@@ -448,6 +654,67 @@ function showSaveBeforeLoadDialog() {
     });
 }
 
+function showWordPasteDialog() {
+    return new Promise((resolve) => {
+        const overlay = document.createElement('div');
+        overlay.className = 'modal-overlay';
+
+        const dialog = document.createElement('div');
+        dialog.className = 'modal-card';
+        dialog.setAttribute('role', 'dialog');
+        dialog.setAttribute('aria-modal', 'true');
+
+        const message = document.createElement('p');
+        message.className = 'modal-message';
+        message.textContent = 'Would you like to convert this to Markdown or paste it as plain text?';
+
+        const actions = document.createElement('div');
+        actions.className = 'modal-actions';
+
+        const plainButton = document.createElement('button');
+        plainButton.type = 'button';
+        plainButton.className = 'btn modal-btn modal-btn-cancel modal-btn-wide';
+        plainButton.textContent = 'Plain text';
+
+        const markdownButton = document.createElement('button');
+        markdownButton.type = 'button';
+        markdownButton.className = 'btn modal-btn modal-btn-ok modal-btn-wide';
+        markdownButton.textContent = 'Markdown';
+
+        const close = (mode) => {
+            document.body.removeChild(overlay);
+            resolve(mode);
+        };
+
+        plainButton.onclick = () => close('plain');
+        markdownButton.onclick = () => close('markdown');
+        overlay.onclick = (event) => {
+            if (event.target === overlay) close('plain');
+        };
+
+        actions.appendChild(plainButton);
+        actions.appendChild(markdownButton);
+        dialog.appendChild(message);
+        dialog.appendChild(actions);
+        overlay.appendChild(dialog);
+        document.body.appendChild(overlay);
+    });
+}
+
+async function handleScriptPaste(event) {
+    const input = getScriptInput();
+    const html = event.clipboardData?.getData('text/html') || '';
+    const plain = event.clipboardData?.getData('text/plain') || '';
+    if (!input || !html || !looksLikeWordHtml(html)) return;
+
+    event.preventDefault();
+    const mode = await showWordPasteDialog();
+    const text = mode === 'markdown'
+        ? getPreferredMarkdownPaste(html, plain)
+        : normalizePlainPaste(plain) || htmlToRenderedParagraphText(html) || plain;
+    insertTextAtCursor(input, text);
+}
+
 async function loadDraft(id) {
     const draft = drafts.find((entry) => entry.id === id);
     const input = getScriptInput();
@@ -594,6 +861,7 @@ function initEditor() {
     ensureCurrentScriptId();
     save();
     input.addEventListener('input', syncCurrentText);
+    input.addEventListener('paste', handleScriptPaste);
     updateSaveButtonState();
     renderDraftList();
     updateSectionOutline();

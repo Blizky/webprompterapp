@@ -4,10 +4,12 @@ let settings = JSON.parse(localStorage.getItem('wpSettings')) || {
 };
 let drafts = JSON.parse(localStorage.getItem('wpDrafts')) || [];
 const MAX_DRAFTS = 100;
+const NEW_DRAFT_CONFIRM_PREF_KEY = 'wpSkipNewDraftConfirm';
 let markdownSections = [];
 let selectedSectionStart = 0;
 let hasSelectedSection = false;
 let activePrompterText = '';
+let outsideClickListenerAttached = false;
 
 const isRemote = new URLSearchParams(window.location.search).has('remote');
 
@@ -66,6 +68,7 @@ function syncCurrentText() {
     const input = getScriptInput();
     if (!input) return;
     settings.text = input.value;
+    updateSaveButtonState();
     updateSectionOutline();
     save();
 }
@@ -124,6 +127,35 @@ function toggleSectionMenu(forceOpen = null) {
     if (shouldOpen) updateSectionOutline();
 }
 
+function eventTargetsNode(event, node) {
+    return !!(node && (event.target === node || node.contains(event.target)));
+}
+
+function handleDocumentPointerDown(event) {
+    const loadPanel = document.getElementById('draft-list-panel');
+    const loadButton = document.getElementById('load-draft-btn');
+    const sectionPanel = document.getElementById('section-panel');
+    const sectionButton = document.getElementById('section-menu-btn');
+
+    if (
+        loadPanel &&
+        loadPanel.style.display === 'block' &&
+        !eventTargetsNode(event, loadPanel) &&
+        !eventTargetsNode(event, loadButton)
+    ) {
+        toggleDraftList(false);
+    }
+
+    if (
+        sectionPanel &&
+        sectionPanel.style.display === 'block' &&
+        !eventTargetsNode(event, sectionPanel) &&
+        !eventTargetsNode(event, sectionButton)
+    ) {
+        toggleSectionMenu(false);
+    }
+}
+
 function selectMarkdownSection(start) {
     const input = getScriptInput();
     if (!input) return;
@@ -147,6 +179,16 @@ function updateLoadButtonState() {
     if (!button) return;
     button.disabled = drafts.length === 0;
     button.style.opacity = drafts.length === 0 ? '0.45' : '1';
+}
+
+function updateSaveButtonState() {
+    const input = getScriptInput();
+    const button = document.getElementById('save-draft-btn');
+    if (!input || !button) return;
+
+    const hasText = input.value.trim().length > 0;
+    button.disabled = !hasText;
+    button.style.opacity = hasText ? '1' : '0.45';
 }
 
 function renderDraftList() {
@@ -212,30 +254,96 @@ function saveDraft() {
         return;
     }
 
-    const draft = {
-        id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
-        title: getDraftTitle(text),
-        text: input.value
-    };
-
-    drafts.unshift(draft);
-    drafts = drafts.slice(0, MAX_DRAFTS);
+    saveCurrentDraft(input.value);
     settings.text = input.value;
     save();
-    saveDrafts();
+    updateSaveButtonState();
     renderDraftList();
     toggleDraftList(true);
 }
 
-function loadDraft(id) {
+function saveCurrentDraft(text) {
+    const trimmed = text.trim();
+    if (!trimmed) return false;
+
+    drafts.unshift({
+        id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+        title: getDraftTitle(trimmed),
+        text
+    });
+    drafts = drafts.slice(0, MAX_DRAFTS);
+    saveDrafts();
+    updateLoadButtonState();
+    return true;
+}
+
+function showSaveBeforeLoadDialog() {
+    return new Promise((resolve) => {
+        const overlay = document.createElement('div');
+        overlay.className = 'modal-overlay';
+
+        const dialog = document.createElement('div');
+        dialog.className = 'modal-card';
+        dialog.setAttribute('role', 'dialog');
+        dialog.setAttribute('aria-modal', 'true');
+
+        const message = document.createElement('p');
+        message.className = 'modal-message';
+        message.textContent = 'Do you want to save current script?';
+
+        const actions = document.createElement('div');
+        actions.className = 'modal-actions';
+
+        const cancelButton = document.createElement('button');
+        cancelButton.type = 'button';
+        cancelButton.className = 'btn modal-btn modal-btn-cancel';
+        cancelButton.textContent = 'Cancel';
+
+        const saveButton = document.createElement('button');
+        saveButton.type = 'button';
+        saveButton.className = 'btn modal-btn modal-btn-ok';
+        saveButton.textContent = 'Save';
+
+        const close = (shouldSave) => {
+            document.body.removeChild(overlay);
+            resolve(shouldSave);
+        };
+
+        cancelButton.onclick = () => close(false);
+        saveButton.onclick = () => close(true);
+        overlay.onclick = (event) => {
+            if (event.target === overlay) close(false);
+        };
+
+        actions.appendChild(cancelButton);
+        actions.appendChild(saveButton);
+        dialog.appendChild(message);
+        dialog.appendChild(actions);
+        overlay.appendChild(dialog);
+        document.body.appendChild(overlay);
+        cancelButton.focus();
+    });
+}
+
+async function loadDraft(id) {
     const draft = drafts.find((entry) => entry.id === id);
     const input = getScriptInput();
     if (!draft || !input) return;
+
+    const currentText = input.value;
+    const hasCurrentScript = currentText.trim().length > 0;
+    const isDifferentDraft = currentText !== draft.text;
+    if (hasCurrentScript && isDifferentDraft) {
+        const shouldSave = await showSaveBeforeLoadDialog();
+        if (!shouldSave) return;
+        saveCurrentDraft(currentText);
+    }
 
     input.value = draft.text;
     settings.text = draft.text;
     selectedSectionStart = 0;
     hasSelectedSection = false;
+    updateSaveButtonState();
     updateSectionOutline();
     save();
     toggleDraftList(false);
@@ -252,19 +360,93 @@ function deleteDraft(id) {
     renderDraftList();
 }
 
-function createNewDraft() {
+function shouldSkipNewDraftConfirm() {
+    return localStorage.getItem(NEW_DRAFT_CONFIRM_PREF_KEY) === 'true';
+}
+
+function setSkipNewDraftConfirm(value) {
+    localStorage.setItem(NEW_DRAFT_CONFIRM_PREF_KEY, value ? 'true' : 'false');
+}
+
+function showNewDraftConfirmDialog() {
+    return new Promise((resolve) => {
+        const overlay = document.createElement('div');
+        overlay.className = 'modal-overlay';
+
+        const dialog = document.createElement('div');
+        dialog.className = 'modal-card';
+        dialog.setAttribute('role', 'dialog');
+        dialog.setAttribute('aria-modal', 'true');
+
+        const message = document.createElement('p');
+        message.className = 'modal-message';
+        message.textContent = 'Clear the current script and start a new draft?';
+
+        const checkboxRow = document.createElement('label');
+        checkboxRow.className = 'modal-checkbox';
+
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.id = 'new-draft-confirm-skip';
+
+        const checkboxText = document.createElement('span');
+        checkboxText.textContent = "Don't ask me again";
+
+        checkboxRow.appendChild(checkbox);
+        checkboxRow.appendChild(checkboxText);
+
+        const actions = document.createElement('div');
+        actions.className = 'modal-actions';
+
+        const cancelButton = document.createElement('button');
+        cancelButton.type = 'button';
+        cancelButton.className = 'btn modal-btn modal-btn-cancel';
+        cancelButton.textContent = 'Cancel';
+
+        const okButton = document.createElement('button');
+        okButton.type = 'button';
+        okButton.className = 'btn modal-btn modal-btn-ok';
+        okButton.textContent = 'OK';
+
+        const close = (confirmed) => {
+            const skip = checkbox.checked;
+            document.body.removeChild(overlay);
+            resolve({ confirmed, skip });
+        };
+
+        cancelButton.onclick = () => close(false);
+        okButton.onclick = () => close(true);
+        overlay.onclick = (event) => {
+            if (event.target === overlay) close(false);
+        };
+
+        actions.appendChild(cancelButton);
+        actions.appendChild(okButton);
+        dialog.appendChild(message);
+        dialog.appendChild(checkboxRow);
+        dialog.appendChild(actions);
+        overlay.appendChild(dialog);
+        document.body.appendChild(overlay);
+        cancelButton.focus();
+    });
+}
+
+async function createNewDraft() {
     const input = getScriptInput();
     if (!input) return;
 
     const hasText = input.value.trim().length > 0;
-    if (hasText && !confirm('Clear the current script and start a new draft?')) {
-        return;
+    if (hasText && !shouldSkipNewDraftConfirm()) {
+        const result = await showNewDraftConfirmDialog();
+        if (!result.confirmed) return;
+        if (result.skip) setSkipNewDraftConfirm(true);
     }
 
     input.value = '';
     settings.text = '';
     selectedSectionStart = 0;
     hasSelectedSection = false;
+    updateSaveButtonState();
     updateSectionOutline();
     save();
     toggleDraftList(false);
@@ -276,8 +458,13 @@ function initEditor() {
 
     input.value = settings.text;
     input.addEventListener('input', syncCurrentText);
+    updateSaveButtonState();
     renderDraftList();
     updateSectionOutline();
+    if (!outsideClickListenerAttached) {
+        document.addEventListener('pointerdown', handleDocumentPointerDown);
+        outsideClickListenerAttached = true;
+    }
 }
 
 async function lockWake() {

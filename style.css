@@ -119,7 +119,8 @@ textarea {
     font-size: 0.95rem;
     font-weight: 600;
     line-height: 1;
-    min-height: 44px;
+    height: 42px;
+    min-height: 42px;
     min-width: 0;
     max-width: none;
     padding: 0 20px;
@@ -140,10 +141,10 @@ textarea {
     background: var(--blue);
     border: 1px solid var(--blue);
     color: var(--white);
-    height: 44px;
+    height: 42px;
     min-width: 0;
-    padding: 0 10px;
-    width: 44px;
+    padding: 0;
+    width: 42px;
 }
 
 .icon-button img {
@@ -227,6 +228,82 @@ textarea {
     font-size: 1rem;
     padding: 18px 16px;
     text-align: center;
+}
+
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 3000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.55);
+    padding: 20px;
+    box-sizing: border-box;
+}
+
+.modal-card {
+    width: min(460px, 100%);
+    background: #1A1A1A;
+    border: 1px solid rgba(92, 170, 219, 0.4);
+    border-radius: 8px;
+    color: #f4f8fc;
+    padding: 18px 20px;
+    box-sizing: border-box;
+}
+
+.modal-message {
+    margin: 0 0 14px;
+    font-size: 1.35rem;
+    font-weight: 500;
+    line-height: 1.3;
+}
+
+.modal-checkbox {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 1rem;
+    margin-bottom: 16px;
+}
+
+.modal-checkbox input {
+    width: 18px;
+    height: 18px;
+}
+
+.modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 16px;
+}
+
+.modal-card .modal-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    box-shadow: none;
+    font-size: 0.95rem;
+    font-weight: 600;
+    line-height: 1;
+    height: 42px;
+    min-height: 42px;
+    width: 90px;
+    min-width: 90px;
+    padding: 0 20px;
+}
+
+.modal-card .modal-btn-cancel {
+    background: #2a3139;
+    border: 1px solid #3a444d;
+    color: #f4f8fc;
+}
+
+.modal-card .modal-btn-ok {
+    background: var(--blue);
+    border: 1px solid var(--blue);
+    color: #ffffff;
 }
 
 /* Prompter Display */
@@ -499,7 +576,8 @@ footer a:hover {
     }
 
     .draft-toolbar .btn-secondary {
-        min-height: 40px;
+        height: 42px;
+        min-height: 42px;
         padding: 0 14px;
         min-width: 0;
         width: auto;
@@ -525,16 +603,17 @@ footer a:hover {
 
     .draft-toolbar .btn-secondary {
         font-size: 0.84rem;
-        min-height: 36px;
+        height: 42px;
+        min-height: 42px;
         min-width: 0;
         padding: 0 10px;
     }
 
     .icon-button {
-        height: 36px;
+        height: 42px;
         min-width: 0;
-        padding: 0 8px;
-        width: 36px;
+        padding: 0;
+        width: 42px;
     }
 
 }

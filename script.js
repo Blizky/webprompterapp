@@ -5,6 +5,7 @@ let settings = JSON.parse(localStorage.getItem('wpSettings')) || {
 let drafts = JSON.parse(localStorage.getItem('wpDrafts')) || [];
 const MAX_DRAFTS = 100;
 const NEW_DRAFT_CONFIRM_PREF_KEY = 'wpSkipNewDraftConfirm';
+const SECTION_COMPLETION_STORAGE_KEY = 'wpSectionCompletions';
 let markdownSections = [];
 let selectedSectionStart = 0;
 let hasSelectedSection = false;
@@ -16,6 +17,22 @@ const isRemote = new URLSearchParams(window.location.search).has('remote');
 // --- COMMON FUNCTIONS ---
 const save = () => localStorage.setItem('wpSettings', JSON.stringify(settings));
 const saveDrafts = () => localStorage.setItem('wpDrafts', JSON.stringify(drafts));
+
+function createStorageId() {
+    return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+}
+
+function getStoredSectionCompletions() {
+    try {
+        return JSON.parse(localStorage.getItem(SECTION_COMPLETION_STORAGE_KEY)) || {};
+    } catch {
+        return {};
+    }
+}
+
+function saveStoredSectionCompletions(completions) {
+    localStorage.setItem(SECTION_COMPLETION_STORAGE_KEY, JSON.stringify(completions));
+}
 
 function getScriptInput() {
     return document.getElementById('script-input');
@@ -41,6 +58,15 @@ function getMarkdownSections(markdown) {
 
     const sections = [];
     let hasSeenH2 = false;
+    let activeH2Title = '';
+    const sectionKeyCounts = {};
+
+    const buildSectionKey = (level, path) => {
+        const baseKey = `${level}:${path.join('>')}`;
+        const count = (sectionKeyCounts[baseKey] || 0) + 1;
+        sectionKeyCounts[baseKey] = count;
+        return `${baseKey}#${count}`;
+    };
 
     matches.forEach((match, index) => {
         const hashes = match[1];
@@ -51,17 +77,70 @@ function getMarkdownSections(markdown) {
 
         if (level === 2) {
             hasSeenH2 = true;
-            sections.push({ title, start, end, level });
+            activeH2Title = title;
+            sections.push({ title, start, end, level, key: buildSectionKey(level, [title]) });
             return;
         }
 
         // Only show H3s under an existing H2 tree.
         if (level === 3 && hasSeenH2) {
-            sections.push({ title, start, end, level });
+            sections.push({ title, start, end, level, key: buildSectionKey(level, [activeH2Title, title]) });
         }
     });
 
     return sections;
+}
+
+function ensureCurrentScriptId() {
+    if (!settings.currentScriptId) {
+        settings.currentScriptId = createStorageId();
+    }
+    return settings.currentScriptId;
+}
+
+function getActiveSectionCompletionKey() {
+    if (settings.activeDraftId && drafts.some((draft) => draft.id === settings.activeDraftId)) {
+        return `draft:${settings.activeDraftId}`;
+    }
+    return `current:${ensureCurrentScriptId()}`;
+}
+
+function isSectionCompleted(sectionKey) {
+    const completions = getStoredSectionCompletions();
+    return !!completions[getActiveSectionCompletionKey()]?.[sectionKey];
+}
+
+function setSectionCompleted(sectionKey, isCompleted) {
+    const fileKey = getActiveSectionCompletionKey();
+    const completions = getStoredSectionCompletions();
+    completions[fileKey] = completions[fileKey] || {};
+
+    if (isCompleted) {
+        completions[fileKey][sectionKey] = true;
+    } else {
+        delete completions[fileKey][sectionKey];
+        if (!Object.keys(completions[fileKey]).length) {
+            delete completions[fileKey];
+        }
+    }
+
+    saveStoredSectionCompletions(completions);
+}
+
+function migrateSectionCompletions(fromKey, toKey, shouldRemoveSource = true) {
+    if (!fromKey || !toKey || fromKey === toKey) return;
+
+    const completions = getStoredSectionCompletions();
+    if (!completions[fromKey]) return;
+
+    completions[toKey] = {
+        ...(completions[toKey] || {}),
+        ...completions[fromKey]
+    };
+    if (shouldRemoveSource) {
+        delete completions[fromKey];
+    }
+    saveStoredSectionCompletions(completions);
 }
 
 function syncCurrentText() {
@@ -101,18 +180,40 @@ function updateSectionOutline() {
     }
 
     markdownSections.forEach((section) => {
-        const button = document.createElement('button');
-        button.type = 'button';
-        button.className = 'section-link';
+        const row = document.createElement('div');
+        row.className = 'section-link';
         if (section.level === 3) {
-            button.classList.add('section-link-h3');
+            row.classList.add('section-link-h3');
         }
         if (hasSelectedSection && section.start === selectedSectionStart) {
-            button.classList.add('section-link-active');
+            row.classList.add('section-link-active');
         }
-        button.textContent = section.title;
-        button.onclick = () => selectMarkdownSection(section.start);
-        list.appendChild(button);
+        row.onclick = () => selectMarkdownSection(section.start);
+
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.className = 'section-complete-checkbox';
+        checkbox.checked = isSectionCompleted(section.key);
+        row.classList.toggle('section-link-complete', checkbox.checked);
+        checkbox.setAttribute('aria-label', `Mark ${section.title} as recorded`);
+        checkbox.onclick = (event) => {
+            event.stopPropagation();
+            setSectionCompleted(section.key, checkbox.checked);
+            row.classList.toggle('section-link-complete', checkbox.checked);
+        };
+
+        const titleButton = document.createElement('button');
+        titleButton.type = 'button';
+        titleButton.className = 'section-title-button';
+        titleButton.textContent = section.title;
+        titleButton.onclick = (event) => {
+            event.stopPropagation();
+            selectMarkdownSection(section.start);
+        };
+
+        row.appendChild(checkbox);
+        row.appendChild(titleButton);
+        list.appendChild(row);
     });
 }
 
@@ -266,15 +367,37 @@ function saveCurrentDraft(text) {
     const trimmed = text.trim();
     if (!trimmed) return false;
 
+    const previousCompletionKey = getActiveSectionCompletionKey();
+    const draftId = createStorageId();
     drafts.unshift({
-        id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+        id: draftId,
         title: getDraftTitle(trimmed),
         text
     });
+    settings.activeDraftId = draftId;
+    migrateSectionCompletions(
+        previousCompletionKey,
+        `draft:${draftId}`,
+        previousCompletionKey.startsWith('current:')
+    );
     drafts = drafts.slice(0, MAX_DRAFTS);
     saveDrafts();
     updateLoadButtonState();
     return true;
+}
+
+function removeSectionCompletionForDraft(id) {
+    const completions = getStoredSectionCompletions();
+    delete completions[`draft:${id}`];
+    saveStoredSectionCompletions(completions);
+}
+
+function removeSectionCompletionForCurrentScript() {
+    if (!settings.currentScriptId) return;
+
+    const completions = getStoredSectionCompletions();
+    delete completions[`current:${settings.currentScriptId}`];
+    saveStoredSectionCompletions(completions);
 }
 
 function showSaveBeforeLoadDialog() {
@@ -341,6 +464,7 @@ async function loadDraft(id) {
 
     input.value = draft.text;
     settings.text = draft.text;
+    settings.activeDraftId = draft.id;
     selectedSectionStart = 0;
     hasSelectedSection = false;
     updateSaveButtonState();
@@ -351,6 +475,11 @@ async function loadDraft(id) {
 
 function deleteDraft(id) {
     drafts = drafts.filter((entry) => entry.id !== id);
+    removeSectionCompletionForDraft(id);
+    if (settings.activeDraftId === id) {
+        delete settings.activeDraftId;
+        save();
+    }
     saveDrafts();
     if (!drafts.length) {
         toggleDraftList(false);
@@ -442,8 +571,13 @@ async function createNewDraft() {
         if (result.skip) setSkipNewDraftConfirm(true);
     }
 
+    if (!settings.activeDraftId) {
+        removeSectionCompletionForCurrentScript();
+    }
     input.value = '';
     settings.text = '';
+    delete settings.activeDraftId;
+    settings.currentScriptId = createStorageId();
     selectedSectionStart = 0;
     hasSelectedSection = false;
     updateSaveButtonState();
@@ -457,6 +591,8 @@ function initEditor() {
     if (!input) return;
 
     input.value = settings.text;
+    ensureCurrentScriptId();
+    save();
     input.addEventListener('input', syncCurrentText);
     updateSaveButtonState();
     renderDraftList();

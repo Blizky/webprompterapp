@@ -68,11 +68,14 @@ textarea {
 }
 
 .section-link {
+    align-items: center;
     background: transparent;
     border: 1px solid transparent;
     border-radius: 6px;
     color: var(--white);
     cursor: pointer;
+    display: flex;
+    gap: 10px;
     font: inherit;
     font-size: 0.95rem;
     font-weight: 700;
@@ -91,11 +94,39 @@ textarea {
     color: #dff4ff;
 }
 
+.section-link-complete .section-title-button {
+    color: #9eb3bf;
+    text-decoration: line-through;
+    text-decoration-thickness: 1px;
+}
+
 .section-link-h3 {
     font-size: 0.88rem;
     font-weight: 600;
     margin-left: 14px;
     padding-left: 14px;
+}
+
+.section-complete-checkbox {
+    accent-color: var(--blue);
+    cursor: pointer;
+    flex: 0 0 auto;
+    height: 16px;
+    margin: 0;
+    width: 16px;
+}
+
+.section-title-button {
+    background: transparent;
+    border: 0;
+    color: inherit;
+    cursor: pointer;
+    flex: 1;
+    font: inherit;
+    line-height: inherit;
+    min-width: 0;
+    padding: 0;
+    text-align: left;
 }
 
 .draft-toolbar {

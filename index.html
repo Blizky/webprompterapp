@@ -55,6 +55,21 @@
           <span class="app_title">
               <span style="color: var(--white);">Web</span>Prompter<span class="title-suffix">.app</span>
           </span>
+          <div class="draft-toolbar">
+            <button id="new-draft-btn" class="btn btn-secondary" type="button" onclick="createNewDraft()">New</button>
+            <button id="save-draft-btn" class="btn btn-secondary" type="button" onclick="saveDraft()">Save</button>
+            <button id="load-draft-btn" class="btn btn-secondary" type="button" onclick="toggleDraftList()">Load</button>
+            <button id="section-menu-btn" class="btn btn-secondary icon-button" type="button" onclick="toggleSectionMenu()" disabled aria-label="Sections">
+                <img src="assets/icons/list_check_fill.svg" alt="">
+            </button>
+            <div id="draft-list-panel" class="draft-list-panel" style="display: none;">
+                <div id="draft-list" class="draft-list"></div>
+            </div>
+            <div id="section-panel" class="section-panel" style="display: none;">
+                <div class="section-panel-title">Sections</div>
+                <div id="markdown-section-list" class="section-list"></div>
+            </div>
+          </div>
         </div>
         <textarea id="script-input" placeholder="1. Open this page on your iPad or Tablet. &#10;2. Paste your script here... &#10;3. Launch and scan the QR code with your Phone to use it as a Remote."></textarea>
         <button class="btn" onclick="startHost()">Launch Prompter & Remote</button>
@@ -110,8 +125,8 @@
             window.location.href = 'remote.html' + window.location.search;
         }
 
-        // 2. Load settings
-        document.getElementById('script-input').value = settings.text;
+        // 2. Load editor state
+        initEditor();
 
         // 3. UNIVERSAL MOBILE DETECTION
         // We check the User Agent string for specific mobile identifiers.

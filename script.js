@@ -2,11 +2,283 @@ let peer, conn, wakeLock = null;
 let settings = JSON.parse(localStorage.getItem('wpSettings')) || {
     text: '', speed: 2, size: 60, mirrored: false
 };
+let drafts = JSON.parse(localStorage.getItem('wpDrafts')) || [];
+const MAX_DRAFTS = 100;
+let markdownSections = [];
+let selectedSectionStart = 0;
+let hasSelectedSection = false;
+let activePrompterText = '';
 
 const isRemote = new URLSearchParams(window.location.search).has('remote');
 
 // --- COMMON FUNCTIONS ---
 const save = () => localStorage.setItem('wpSettings', JSON.stringify(settings));
+const saveDrafts = () => localStorage.setItem('wpDrafts', JSON.stringify(drafts));
+
+function getScriptInput() {
+    return document.getElementById('script-input');
+}
+
+function getDraftTitle(text) {
+    const headingMatch = text.match(/^#{1,6}\s+(.+)$/m);
+    const source = headingMatch ? headingMatch[1] : text;
+    const normalized = source.replace(/\s+/g, ' ').trim();
+    if (!normalized) return 'Untitled draft';
+    return normalized.length > 25 ? normalized.slice(0, 25) + '...' : normalized;
+}
+
+function getMarkdownH2Title(line) {
+    const match = line.match(/^##\s+(.+?)\s*#*\s*$/);
+    return match ? match[1].trim() : '';
+}
+
+function getMarkdownSections(markdown) {
+    const headingPattern = /^(#{2,3})\s+(.+)$/gm;
+    const matches = [...markdown.matchAll(headingPattern)];
+    if (!matches.length) return [];
+
+    const sections = [];
+    let hasSeenH2 = false;
+
+    matches.forEach((match, index) => {
+        const hashes = match[1];
+        const level = hashes.length;
+        const title = match[2].trim().replace(/\s*#*\s*$/, '');
+        const start = match.index;
+        const end = matches[index + 1]?.index ?? markdown.length;
+
+        if (level === 2) {
+            hasSeenH2 = true;
+            sections.push({ title, start, end, level });
+            return;
+        }
+
+        // Only show H3s under an existing H2 tree.
+        if (level === 3 && hasSeenH2) {
+            sections.push({ title, start, end, level });
+        }
+    });
+
+    return sections;
+}
+
+function syncCurrentText() {
+    const input = getScriptInput();
+    if (!input) return;
+    settings.text = input.value;
+    updateSectionOutline();
+    save();
+}
+
+function updateSectionOutline() {
+    const input = getScriptInput();
+    const panel = document.getElementById('section-panel');
+    const list = document.getElementById('markdown-section-list');
+    const button = document.getElementById('section-menu-btn');
+    if (!input || !panel || !list || !button) return;
+
+    markdownSections = getMarkdownSections(input.value);
+    list.innerHTML = '';
+
+    if (!markdownSections.length) {
+        panel.style.display = 'none';
+        button.disabled = true;
+        button.style.opacity = '0.45';
+        selectedSectionStart = 0;
+        hasSelectedSection = false;
+        return;
+    }
+
+    button.disabled = false;
+    button.style.opacity = '1';
+
+    if (hasSelectedSection && !markdownSections.some((section) => section.start === selectedSectionStart)) {
+        selectedSectionStart = 0;
+        hasSelectedSection = false;
+    }
+
+    markdownSections.forEach((section) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'section-link';
+        if (section.level === 3) {
+            button.classList.add('section-link-h3');
+        }
+        if (hasSelectedSection && section.start === selectedSectionStart) {
+            button.classList.add('section-link-active');
+        }
+        button.textContent = section.title;
+        button.onclick = () => selectMarkdownSection(section.start);
+        list.appendChild(button);
+    });
+}
+
+function toggleSectionMenu(forceOpen = null) {
+    const panel = document.getElementById('section-panel');
+    const button = document.getElementById('section-menu-btn');
+    if (!panel || !button || button.disabled) return;
+
+    const shouldOpen = forceOpen === null ? panel.style.display === 'none' : forceOpen;
+    panel.style.display = shouldOpen ? 'block' : 'none';
+
+    if (shouldOpen) updateSectionOutline();
+}
+
+function selectMarkdownSection(start) {
+    const input = getScriptInput();
+    if (!input) return;
+
+    selectedSectionStart = start;
+    hasSelectedSection = true;
+    input.focus();
+    input.setSelectionRange(start, start);
+
+    const textBeforeSection = input.value.slice(0, start);
+    const lineCount = textBeforeSection.split('\n').length - 1;
+    const styles = window.getComputedStyle(input);
+    const lineHeight = parseFloat(styles.lineHeight) || parseFloat(styles.fontSize) * 1.5;
+    input.scrollTop = Math.max(0, lineCount * lineHeight - 20);
+    updateSectionOutline();
+    toggleSectionMenu(false);
+}
+
+function updateLoadButtonState() {
+    const button = document.getElementById('load-draft-btn');
+    if (!button) return;
+    button.disabled = drafts.length === 0;
+    button.style.opacity = drafts.length === 0 ? '0.45' : '1';
+}
+
+function renderDraftList() {
+    const list = document.getElementById('draft-list');
+    if (!list) return;
+
+    list.innerHTML = '';
+
+    if (!drafts.length) {
+        const empty = document.createElement('div');
+        empty.className = 'draft-empty';
+        empty.textContent = 'No saved drafts yet.';
+        list.appendChild(empty);
+        updateLoadButtonState();
+        return;
+    }
+
+    drafts.forEach((draft) => {
+        const row = document.createElement('div');
+        row.className = 'draft-row';
+
+        const loadButton = document.createElement('button');
+        loadButton.type = 'button';
+        loadButton.className = 'draft-load';
+        loadButton.textContent = draft.title;
+        loadButton.onclick = () => loadDraft(draft.id);
+
+        const deleteButton = document.createElement('button');
+        deleteButton.type = 'button';
+        deleteButton.className = 'draft-delete';
+        deleteButton.setAttribute('aria-label', 'Delete draft');
+        const deleteIcon = document.createElement('img');
+        deleteIcon.src = 'assets/icons/delete_2_line.svg';
+        deleteIcon.alt = '';
+        deleteButton.appendChild(deleteIcon);
+        deleteButton.onclick = () => deleteDraft(draft.id);
+
+        row.appendChild(loadButton);
+        row.appendChild(deleteButton);
+        list.appendChild(row);
+    });
+
+    updateLoadButtonState();
+}
+
+function toggleDraftList(forceOpen = null) {
+    const panel = document.getElementById('draft-list-panel');
+    if (!panel) return;
+
+    const shouldOpen = forceOpen === null ? panel.style.display === 'none' : forceOpen;
+    panel.style.display = shouldOpen ? 'block' : 'none';
+
+    if (shouldOpen) renderDraftList();
+}
+
+function saveDraft() {
+    const input = getScriptInput();
+    if (!input) return;
+
+    const text = input.value.trim();
+    if (!text) {
+        alert('Write or paste some text before saving a draft.');
+        return;
+    }
+
+    const draft = {
+        id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+        title: getDraftTitle(text),
+        text: input.value
+    };
+
+    drafts.unshift(draft);
+    drafts = drafts.slice(0, MAX_DRAFTS);
+    settings.text = input.value;
+    save();
+    saveDrafts();
+    renderDraftList();
+    toggleDraftList(true);
+}
+
+function loadDraft(id) {
+    const draft = drafts.find((entry) => entry.id === id);
+    const input = getScriptInput();
+    if (!draft || !input) return;
+
+    input.value = draft.text;
+    settings.text = draft.text;
+    selectedSectionStart = 0;
+    hasSelectedSection = false;
+    updateSectionOutline();
+    save();
+    toggleDraftList(false);
+}
+
+function deleteDraft(id) {
+    drafts = drafts.filter((entry) => entry.id !== id);
+    saveDrafts();
+    if (!drafts.length) {
+        toggleDraftList(false);
+        updateLoadButtonState();
+        return;
+    }
+    renderDraftList();
+}
+
+function createNewDraft() {
+    const input = getScriptInput();
+    if (!input) return;
+
+    const hasText = input.value.trim().length > 0;
+    if (hasText && !confirm('Clear the current script and start a new draft?')) {
+        return;
+    }
+
+    input.value = '';
+    settings.text = '';
+    selectedSectionStart = 0;
+    hasSelectedSection = false;
+    updateSectionOutline();
+    save();
+    toggleDraftList(false);
+}
+
+function initEditor() {
+    const input = getScriptInput();
+    if (!input) return;
+
+    input.value = settings.text;
+    input.addEventListener('input', syncCurrentText);
+    renderDraftList();
+    updateSectionOutline();
+}
 
 async function lockWake() {
     try { if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); } catch {}
@@ -14,7 +286,9 @@ async function lockWake() {
 
 // --- IPAD (HOST) LOGIC ---
 function startHost() {
-    settings.text = document.getElementById('script-input').value;
+    const scriptText = document.getElementById('script-input').value;
+    settings.text = scriptText;
+    activePrompterText = hasSelectedSection ? scriptText.slice(selectedSectionStart) : scriptText;
     save();
     document.getElementById('edit-mode').style.display = 'none';
     document.getElementById('prompter-mode').style.display = 'block';
@@ -121,7 +395,7 @@ function updateDisplay() {
     // This pushes the text into view so the first lines aren't cut off
     const prefix = settings.mirrored ? '\n\n\n\n' : '';
     
-    display.innerText = prefix + settings.text;
+    display.innerText = prefix + (activePrompterText || settings.text);
     display.style.fontSize = settings.size + 'px';
     
     container.className = settings.mirrored ? 'mirrored' : '';

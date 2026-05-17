@@ -17,19 +17,216 @@ body, html {
     display: flex; 
     flex-direction: column; 
     height: 100vh; 
-    padding: 20px; 
+    padding: 0 20px 20px; 
     box-sizing: border-box;
 }
 
 textarea { 
     flex-grow: 0; 
     height: 50vh;
-    margin: 15px 0; 
+    margin: 12px 0 15px; 
     padding: 20px; 
     border: 2px solid var(--yellow);
     font-size: 1.2rem; 
     border-radius: 10px; 
     resize: none;
+    box-sizing: border-box;
+}
+
+.section-panel {
+    background: #08253a;
+    border: 1px solid rgba(92, 170, 219, 0.5);
+    border-radius: 8px;
+    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.3);
+    box-sizing: border-box;
+    color: var(--white);
+    max-height: min(420px, calc(100vh - 120px));
+    min-width: 280px;
+    overflow: hidden;
+    position: absolute;
+    right: 0;
+    top: calc(100% + 10px);
+    width: min(360px, calc(100vw - 40px));
+    z-index: 21;
+}
+
+.section-panel-title {
+    border-bottom: 1px solid rgba(92, 170, 219, 0.25);
+    color: var(--yellow);
+    font-size: 0.8rem;
+    font-weight: 800;
+    padding: 12px 14px;
+    text-transform: uppercase;
+}
+
+.section-list {
+    display: flex;
+    flex-direction: column;
+    max-height: 360px;
+    overflow-y: auto;
+    padding: 8px;
+}
+
+.section-link {
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    color: var(--white);
+    cursor: pointer;
+    font: inherit;
+    font-size: 0.95rem;
+    font-weight: 700;
+    line-height: 1.25;
+    padding: 10px;
+    text-align: left;
+}
+
+.section-link:hover {
+    background: rgba(0, 153, 204, 0.12);
+}
+
+.section-link-active {
+    background: rgba(0, 153, 204, 0.2);
+    border-color: rgba(0, 153, 204, 0.55);
+    color: #dff4ff;
+}
+
+.section-link-h3 {
+    font-size: 0.88rem;
+    font-weight: 600;
+    margin-left: 14px;
+    padding-left: 14px;
+}
+
+.draft-toolbar {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+    gap: 8px;
+    margin-left: auto;
+    position: relative;
+}
+
+.draft-toolbar .btn-secondary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    background: var(--blue);
+    border: 1px solid var(--blue);
+    color: var(--white);
+    box-shadow: none;
+    font-size: 0.95rem;
+    font-weight: 600;
+    line-height: 1;
+    min-height: 44px;
+    min-width: 0;
+    max-width: none;
+    padding: 0 20px;
+    text-align: center;
+    white-space: nowrap;
+    width: auto;
+}
+
+.draft-toolbar .btn-secondary:hover {
+    background: #00a8df;
+}
+
+.draft-toolbar .btn-secondary:disabled {
+    cursor: default;
+}
+
+.icon-button {
+    background: var(--blue);
+    border: 1px solid var(--blue);
+    color: var(--white);
+    height: 44px;
+    min-width: 0;
+    padding: 0 10px;
+    width: 44px;
+}
+
+.icon-button img {
+    display: block;
+    filter: brightness(0) invert(1);
+    height: 18px;
+    width: 18px;
+}
+
+.draft-list-panel {
+    background: #08253a;
+    border: 1px solid rgba(92, 170, 219, 0.5);
+    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.3);
+    margin-top: 0;
+    max-width: 360px;
+    min-width: 280px;
+    position: absolute;
+    right: 0;
+    top: calc(100% + 10px);
+    width: min(360px, calc(100vw - 40px));
+    z-index: 20;
+}
+
+.draft-list {
+    display: flex;
+    flex-direction: column;
+}
+
+.draft-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 18px 16px;
+    border-bottom: 1px solid rgba(92, 170, 219, 0.2);
+}
+
+.draft-row:last-child {
+    border-bottom: none;
+}
+
+.draft-load {
+    flex: 1;
+    background: transparent;
+    border: none;
+    color: var(--white);
+    cursor: pointer;
+    font-size: 1rem;
+    font-weight: 500;
+    text-align: left;
+    padding: 0;
+}
+
+.draft-load:hover {
+    color: #dff4ff;
+}
+
+.draft-delete {
+    width: 26px;
+    height: 26px;
+    border-radius: 0;
+    border: 0;
+    background: transparent;
+    color: var(--white);
+    cursor: pointer;
+    font-size: 1rem;
+    font-weight: 400;
+    line-height: 1;
+    padding: 0;
+}
+
+.draft-delete img {
+    display: block;
+    filter: brightness(0) invert(1);
+    height: 16px;
+    margin: 0 auto;
+    width: 16px;
+}
+
+.draft-empty {
+    color: #8ba3b3;
+    font-size: 1rem;
+    padding: 18px 16px;
+    text-align: center;
 }
 
 /* Prompter Display */
@@ -138,8 +335,19 @@ textarea {
 .header-container {
     display: flex;
     align-items: center;
-    justify-content: center;
-    margin-bottom: 10px; 
+    justify-content: flex-start;
+    flex: 0 0 60px;
+    height: 60px;
+    min-height: 60px;
+    max-height: 60px;
+    gap: 0;
+    overflow: visible;
+    position: relative;
+    width: 100%;
+    box-sizing: border-box;
+    padding-top: 0;
+    padding-bottom: 0;
+    margin-bottom: 0; 
 }
 
 /* The Mirrored Emoji (Icon) with GLOW */
@@ -159,6 +367,8 @@ textarea {
   font-weight: 800; /* Extra Bold */
   letter-spacing: -1px;
   vertical-align: middle;
+  flex-shrink: 1;
+  white-space: nowrap;
 }
 
 .app_title { font-size: 2.2rem; }
@@ -282,6 +492,53 @@ footer a:hover {
 
 
 /* Mobile tweak: Stack them on small screens */
+@media (max-width: 720px) {
+    .draft-toolbar {
+        flex-direction: row;
+        gap: 6px;
+    }
+
+    .draft-toolbar .btn-secondary {
+        min-height: 40px;
+        padding: 0 14px;
+        min-width: 0;
+        width: auto;
+    }
+
+    .draft-load {
+        font-size: 1.2rem;
+    }
+}
+
+@media (max-width: 560px) {
+    .app_icon {
+        display: none;
+    }
+
+    .app_title {
+        font-size: 1.28rem;
+    }
+
+    .title-suffix {
+        display: none;
+    }
+
+    .draft-toolbar .btn-secondary {
+        font-size: 0.84rem;
+        min-height: 36px;
+        min-width: 0;
+        padding: 0 10px;
+    }
+
+    .icon-button {
+        height: 36px;
+        min-width: 0;
+        padding: 0 8px;
+        width: 36px;
+    }
+
+}
+
 @media (max-width: 500px) {
     .feedback-grid {
         grid-template-columns: 1fr;

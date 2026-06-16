@@ -6,12 +6,16 @@ let drafts = JSON.parse(localStorage.getItem('wpDrafts')) || [];
 const MAX_DRAFTS = 100;
 const NEW_DRAFT_CONFIRM_PREF_KEY = 'wpSkipNewDraftConfirm';
 const SECTION_COMPLETION_STORAGE_KEY = 'wpSectionCompletions';
+const READING_SPEED_STORAGE_KEY = 'wpReadingSpeedWpm';
+const DEFAULT_READING_SPEED_WPM = 150;
 const EMOJI_REGEX = /[\p{Extended_Pictographic}\p{Emoji_Presentation}\uFE0F]/gu;
 let markdownSections = [];
 let selectedSectionStart = 0;
 let hasSelectedSection = false;
 let activePrompterText = '';
 let outsideClickListenerAttached = false;
+let readingSpeedWpm = getStoredReadingSpeed();
+let saveButtonFeedbackState = 'idle';
 
 const isRemote = new URLSearchParams(window.location.search).has('remote');
 
@@ -37,6 +41,73 @@ function saveStoredSectionCompletions(completions) {
 
 function getScriptInput() {
     return document.getElementById('script-input');
+}
+
+function getStoredReadingSpeed() {
+    const storedSpeed = Number(localStorage.getItem(READING_SPEED_STORAGE_KEY));
+    return Number.isFinite(storedSpeed) && storedSpeed > 0 ? storedSpeed : DEFAULT_READING_SPEED_WPM;
+}
+
+function saveReadingSpeed(value) {
+    readingSpeedWpm = value;
+    localStorage.setItem(READING_SPEED_STORAGE_KEY, String(value));
+    updateEditorStatus();
+}
+
+function updateSelectedSectionTitle() {
+    const titleElement = document.getElementById('selected-section-title');
+    if (!titleElement) return;
+
+    const selectedSection = getSelectedMarkdownSection();
+
+    if (!selectedSection) {
+        titleElement.textContent = '';
+        titleElement.hidden = true;
+        return;
+    }
+
+    titleElement.textContent = selectedSection.title;
+    titleElement.hidden = false;
+}
+
+function getSelectedMarkdownSection() {
+    if (!hasSelectedSection) return null;
+    return markdownSections.find((section) => section.start === selectedSectionStart) || null;
+}
+
+function getActiveScriptText(scriptText) {
+    const selectedSection = getSelectedMarkdownSection();
+    if (!selectedSection) return scriptText;
+    return scriptText.slice(selectedSection.start, selectedSection.end).trim();
+}
+
+function getWordCount(text) {
+    const matches = (text || '').trim().match(/\S+/g);
+    return matches ? matches.length : 0;
+}
+
+function formatReadMinutes(wordCount) {
+    if (!wordCount) return '0 min read';
+    const minutes = Math.max(1, Math.ceil(wordCount / readingSpeedWpm));
+    return `${minutes} min read`;
+}
+
+function formatSectionReadMinutes(wordCount) {
+    if (!wordCount) return '0 min';
+    const minutes = Math.max(1, Math.ceil(wordCount / readingSpeedWpm));
+    return `${minutes} min`;
+}
+
+function updateEditorStatus() {
+    const input = getScriptInput();
+    const wordCountElement = document.getElementById('word-count-status');
+    const readTimeElement = document.getElementById('reading-time-status');
+    if (!input || !wordCountElement || !readTimeElement) return;
+
+    const wordCount = getWordCount(getActiveScriptText(input.value));
+    wordCountElement.textContent = `${wordCount} ${wordCount === 1 ? 'word' : 'words'}`;
+    readTimeElement.textContent = formatReadMinutes(wordCount);
+    readTimeElement.title = `Reading speed: ${readingSpeedWpm} words per minute`;
 }
 
 function stripEmojis(text) {
@@ -67,6 +138,12 @@ function getMarkdownSections(markdown) {
     let activeH1Title = '';
     let activeH2Title = '';
     const sectionKeyCounts = {};
+    const getSectionEnd = (index, level) => {
+        const nextPeerOrParent = matches
+            .slice(index + 1)
+            .find((match) => match[1].length <= level);
+        return nextPeerOrParent?.index ?? markdown.length;
+    };
 
     const buildSectionKey = (level, path) => {
         const baseKey = `${level}:${path.join('>')}`;
@@ -80,7 +157,7 @@ function getMarkdownSections(markdown) {
         const level = hashes.length;
         const title = match[2].trim().replace(/\s*#*\s*$/, '');
         const start = match.index;
-        const end = matches[index + 1]?.index ?? markdown.length;
+        const end = getSectionEnd(index, level);
 
         if (level === 1) {
             hasSeenH1 = true;
@@ -349,8 +426,10 @@ function syncCurrentText() {
     const input = getScriptInput();
     if (!input) return;
     settings.text = input.value;
+    resetSaveButtonFeedback();
     updateSaveButtonState();
     updateSectionOutline();
+    updateEditorStatus();
     save();
 }
 
@@ -370,6 +449,8 @@ function updateSectionOutline() {
         button.style.opacity = '0.45';
         selectedSectionStart = 0;
         hasSelectedSection = false;
+        updateSelectedSectionTitle();
+        updateEditorStatus();
         return;
     }
 
@@ -380,6 +461,8 @@ function updateSectionOutline() {
         selectedSectionStart = 0;
         hasSelectedSection = false;
     }
+    updateSelectedSectionTitle();
+    updateEditorStatus();
 
     const hasH1Sections = markdownSections.some((section) => section.level === 1);
     markdownSections.forEach((section) => {
@@ -417,8 +500,13 @@ function updateSectionOutline() {
             selectMarkdownSection(section.start);
         };
 
+        const readTime = document.createElement('span');
+        readTime.className = 'section-read-time';
+        readTime.textContent = formatSectionReadMinutes(getWordCount(input.value.slice(section.start, section.end)));
+
         row.appendChild(checkbox);
         row.appendChild(titleButton);
+        row.appendChild(readTime);
         list.appendChild(row);
     });
 }
@@ -463,6 +551,35 @@ function handleDocumentPointerDown(event) {
     }
 }
 
+function getTextareaScrollTopForOffset(input, offset) {
+    const styles = window.getComputedStyle(input);
+    const mirror = document.createElement('div');
+    const marker = document.createElement('span');
+
+    mirror.style.position = 'absolute';
+    mirror.style.visibility = 'hidden';
+    mirror.style.pointerEvents = 'none';
+    mirror.style.whiteSpace = 'pre-wrap';
+    mirror.style.overflowWrap = 'break-word';
+    mirror.style.boxSizing = 'border-box';
+    mirror.style.width = `${input.clientWidth}px`;
+    mirror.style.padding = styles.padding;
+    mirror.style.font = styles.font;
+    mirror.style.letterSpacing = styles.letterSpacing;
+    mirror.style.lineHeight = styles.lineHeight;
+    mirror.style.border = '0';
+
+    marker.textContent = '\u200b';
+    mirror.appendChild(document.createTextNode(input.value.slice(0, offset)));
+    mirror.appendChild(marker);
+    document.body.appendChild(mirror);
+
+    const paddingTop = parseFloat(styles.paddingTop) || 0;
+    const scrollTop = Math.max(0, marker.offsetTop - paddingTop);
+    document.body.removeChild(mirror);
+    return scrollTop;
+}
+
 function selectMarkdownSection(start) {
     const input = getScriptInput();
     if (!input) return;
@@ -471,12 +588,7 @@ function selectMarkdownSection(start) {
     hasSelectedSection = true;
     input.focus();
     input.setSelectionRange(start, start);
-
-    const textBeforeSection = input.value.slice(0, start);
-    const lineCount = textBeforeSection.split('\n').length - 1;
-    const styles = window.getComputedStyle(input);
-    const lineHeight = parseFloat(styles.lineHeight) || parseFloat(styles.fontSize) * 1.5;
-    input.scrollTop = Math.max(0, lineCount * lineHeight - 20);
+    input.scrollTop = getTextareaScrollTopForOffset(input, start);
     updateSectionOutline();
     toggleSectionMenu(false);
 }
@@ -494,8 +606,31 @@ function updateSaveButtonState() {
     if (!input || !button) return;
 
     const hasText = input.value.trim().length > 0;
+    if (saveButtonFeedbackState === 'saved') {
+        button.textContent = 'Saved';
+        button.disabled = true;
+        button.style.opacity = '0.75';
+        return;
+    }
+
+    button.textContent = 'Save';
     button.disabled = !hasText;
     button.style.opacity = hasText ? '1' : '0.45';
+}
+
+function resetSaveButtonFeedback() {
+    saveButtonFeedbackState = 'idle';
+}
+
+function showSavedButtonFeedback() {
+    const button = document.getElementById('save-draft-btn');
+    if (!button) return;
+
+    resetSaveButtonFeedback();
+    saveButtonFeedbackState = 'saved';
+    button.disabled = true;
+    button.style.opacity = '0.75';
+    button.textContent = 'Saved';
 }
 
 function renderDraftList() {
@@ -561,12 +696,30 @@ function saveDraft() {
         return;
     }
 
-    saveCurrentDraft(input.value);
+    if (!updateActiveDraft(input.value)) {
+        saveCurrentDraft(input.value);
+    }
     settings.text = input.value;
     save();
-    updateSaveButtonState();
     renderDraftList();
-    toggleDraftList(true);
+    toggleDraftList(false);
+    showSavedButtonFeedback();
+}
+
+function updateActiveDraft(text) {
+    if (!settings.activeDraftId) return false;
+
+    const draft = drafts.find((entry) => entry.id === settings.activeDraftId);
+    if (!draft) return false;
+
+    const trimmed = text.trim();
+    if (!trimmed) return false;
+
+    draft.title = getDraftTitle(trimmed);
+    draft.text = text;
+    saveDrafts();
+    updateLoadButtonState();
+    return true;
 }
 
 function saveCurrentDraft(text) {
@@ -701,6 +854,86 @@ function showWordPasteDialog() {
     });
 }
 
+function showReadingSpeedDialog() {
+    return new Promise((resolve) => {
+        const overlay = document.createElement('div');
+        overlay.className = 'modal-overlay';
+
+        const dialog = document.createElement('div');
+        dialog.className = 'modal-card reading-speed-modal';
+        dialog.setAttribute('role', 'dialog');
+        dialog.setAttribute('aria-modal', 'true');
+
+        const message = document.createElement('p');
+        message.className = 'modal-message';
+        message.textContent = 'Reading speed';
+
+        const field = document.createElement('label');
+        field.className = 'modal-field';
+
+        const labelText = document.createElement('span');
+        labelText.innerHTML = 'Average speaking pace for video is <strong>130</strong> to <strong>150</strong> WPM.';
+
+        const input = document.createElement('input');
+        input.className = 'modal-input';
+        input.type = 'number';
+        input.min = '1';
+        input.step = '1';
+        input.inputMode = 'numeric';
+        input.value = String(readingSpeedWpm || DEFAULT_READING_SPEED_WPM);
+
+        const actions = document.createElement('div');
+        actions.className = 'modal-actions';
+
+        const cancelButton = document.createElement('button');
+        cancelButton.type = 'button';
+        cancelButton.className = 'btn modal-btn modal-btn-cancel';
+        cancelButton.textContent = 'Cancel';
+
+        const saveButton = document.createElement('button');
+        saveButton.type = 'button';
+        saveButton.className = 'btn modal-btn modal-btn-ok';
+        saveButton.textContent = 'Save';
+
+        const close = (shouldSave) => {
+            if (shouldSave) {
+                const nextSpeed = Math.round(Number(input.value));
+                if (!Number.isFinite(nextSpeed) || nextSpeed < 1) {
+                    input.focus();
+                    input.select();
+                    return;
+                }
+                saveReadingSpeed(nextSpeed);
+            }
+
+            document.body.removeChild(overlay);
+            resolve(shouldSave);
+        };
+
+        cancelButton.onclick = () => close(false);
+        saveButton.onclick = () => close(true);
+        input.onkeydown = (event) => {
+            if (event.key === 'Enter') close(true);
+            if (event.key === 'Escape') close(false);
+        };
+        overlay.onclick = (event) => {
+            if (event.target === overlay) close(false);
+        };
+
+        field.appendChild(labelText);
+        field.appendChild(input);
+        actions.appendChild(cancelButton);
+        actions.appendChild(saveButton);
+        dialog.appendChild(message);
+        dialog.appendChild(field);
+        dialog.appendChild(actions);
+        overlay.appendChild(dialog);
+        document.body.appendChild(overlay);
+        input.focus();
+        input.select();
+    });
+}
+
 async function handleScriptPaste(event) {
     const input = getScriptInput();
     const html = event.clipboardData?.getData('text/html') || '';
@@ -726,7 +959,9 @@ async function loadDraft(id) {
     if (hasCurrentScript && isDifferentDraft) {
         const shouldSave = await showSaveBeforeLoadDialog();
         if (!shouldSave) return;
-        saveCurrentDraft(currentText);
+        if (!updateActiveDraft(currentText)) {
+            saveCurrentDraft(currentText);
+        }
     }
 
     input.value = draft.text;
@@ -734,6 +969,7 @@ async function loadDraft(id) {
     settings.activeDraftId = draft.id;
     selectedSectionStart = 0;
     hasSelectedSection = false;
+    resetSaveButtonFeedback();
     updateSaveButtonState();
     updateSectionOutline();
     save();
@@ -847,6 +1083,7 @@ async function createNewDraft() {
     settings.currentScriptId = createStorageId();
     selectedSectionStart = 0;
     hasSelectedSection = false;
+    resetSaveButtonFeedback();
     updateSaveButtonState();
     updateSectionOutline();
     save();
@@ -879,7 +1116,8 @@ async function lockWake() {
 function startHost() {
     const scriptText = document.getElementById('script-input').value;
     settings.text = scriptText;
-    activePrompterText = hasSelectedSection ? scriptText.slice(selectedSectionStart) : scriptText;
+    markdownSections = getMarkdownSections(scriptText);
+    activePrompterText = getActiveScriptText(scriptText);
     save();
     document.getElementById('edit-mode').style.display = 'none';
     document.getElementById('prompter-mode').style.display = 'block';

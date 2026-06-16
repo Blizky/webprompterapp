@@ -89,6 +89,7 @@
                 <img src="assets/icons/list_check_fill.svg" alt="">
             </button>
             <div id="draft-list-panel" class="draft-list-panel" style="display: none;">
+                <div class="draft-list-title">Saved Files</div>
                 <div id="draft-list" class="draft-list"></div>
             </div>
             <div id="section-panel" class="section-panel" style="display: none;">
@@ -97,7 +98,16 @@
             </div>
           </div>
         </div>
-        <textarea id="script-input" placeholder="1. Open this page on your iPad or Tablet. &#10;2. Paste your script here... &#10;3. Launch and scan the QR code with your Phone to use it as a Remote."></textarea>
+        <div class="editor-shell">
+            <textarea id="script-input" placeholder="1. Open this page on your iPad or Tablet. &#10;2. Paste your script here... &#10;3. Launch and scan the QR code with your Phone to use it as a Remote."></textarea>
+            <div class="editor-status-bar" aria-live="polite">
+                <span id="selected-section-title" class="selected-section-title" hidden></span>
+                <span class="editor-status-metrics">
+                    <span id="word-count-status">0 words</span>
+                    <button id="reading-time-status" class="reading-time-button" type="button" onclick="showReadingSpeedDialog()">0 min read</button>
+                </span>
+            </div>
+        </div>
         <button class="btn" onclick="startHost()">Launch Prompter & Remote</button>
         <a href="help.html" class="help-link">How to use and recording tips</a>
 
